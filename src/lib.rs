@@ -8,22 +8,28 @@ use crossterm::style::{Color, Print, ResetColor, SetBackgroundColor, SetForegrou
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType};
 use std::io::stdout;
 
-pub struct Menu<'a> {
+pub struct Menu<'a, F> where
+F: Fn(&str) -> String
+{
     title: &'a str,
     options: &'a Vec<&'a str>,
     selected_index: usize,
     stdout: std::io::Stdout,
     title_offset: usize,
     new_line_count: usize,
+    option_formater: F,
 }
 
-impl<'a> Menu<'a> {
+impl<'a, F> Menu<'a, F> where
+F:Fn(&str) -> String
+{
     pub fn new(
         title: &'a str,
         options: &'a Vec<&'a str>,
         title_offset: usize,
         selected_index: usize,
-    ) -> Result<Menu<'a>, String> {
+        option_formater: F,
+    ) -> Result<Self, String> {
         if selected_index >= options.len() {
             return Err(format!(
                 "Selected option [{}] is out of range",
@@ -57,11 +63,12 @@ impl<'a> Menu<'a> {
             stdout: stdout(),
             title_offset,
             new_line_count,
+            option_formater,
         })
     }
 
     fn format_option(&self, index: usize) -> String {
-        format!("{} - {}\n", index, self.options[index])
+        format!("{} - {}\n", index, (self.option_formater)(self.options[index]))
     }
 
     fn format_title(&self) -> String {

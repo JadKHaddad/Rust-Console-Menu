@@ -1,3 +1,3 @@
 # Rust Console Menu
 
-No it does not blink ;)
+No, it does not blink ;)

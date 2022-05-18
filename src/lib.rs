@@ -1,13 +1,13 @@
 #[macro_use]
 extern crate crossterm;
 extern crate termsize;
-
+pub use crossterm::style::Color;
 use crossterm::cursor;
 use crossterm::event::{read, Event, KeyCode, KeyEvent, KeyModifiers};
-use crossterm::style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor};
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType};
-use std::io::stdout;
-use std::process;
+use crossterm::style::{Print, ResetColor, SetBackgroundColor, SetForegroundColor};
+use crossterm::terminal::{enable_raw_mode, Clear, ClearType};
+use std::{io::stdout, process};
+
 
 pub struct Menu<'a> {
     title: &'a str,
@@ -16,6 +16,8 @@ pub struct Menu<'a> {
     stdout: std::io::Stdout,
     new_line_count: usize,
     selector: &'a str,
+    selected_foreground_color: Color,
+    selected_background_color: Color,
 }
 
 impl<'a> Menu<'a> {
@@ -58,7 +60,16 @@ impl<'a> Menu<'a> {
             stdout: stdout(),
             new_line_count,
             selector,
+            selected_foreground_color: Color::White,
+            selected_background_color: Color::Black,
         })
+    }
+    pub fn set_selected_foreground_color(&mut self, color: Color) {
+        self.selected_foreground_color = color;
+    }
+
+    pub fn set_selected_background_color(&mut self, color: Color) {
+        self.selected_background_color = color;
     }
 
     fn format_option(&self, index: usize) -> String {
@@ -69,7 +80,7 @@ impl<'a> Menu<'a> {
         format!("{}\n", self.title)
     }
 
-    pub fn display(&mut self) {
+    fn display(&mut self) {
         let out = self.format_title();
         execute!(
             self.stdout,
@@ -83,7 +94,8 @@ impl<'a> Menu<'a> {
             if i == self.selected_index {
                 execute!(
                     self.stdout,
-                    SetForegroundColor(Color::Blue),
+                    SetForegroundColor(self.selected_foreground_color),
+                    SetBackgroundColor(self.selected_background_color),
                     Print(self.selector),
                     Print(out),
                     ResetColor
@@ -117,6 +129,7 @@ impl<'a> Menu<'a> {
         )
         .unwrap();
     }
+
     pub fn run(&mut self) -> Option<usize> {
         enable_raw_mode().unwrap();
         execute!(self.stdout, cursor::Hide).unwrap();
@@ -138,7 +151,8 @@ impl<'a> Menu<'a> {
                             Print(current_line_out),
                             cursor::MoveToPreviousLine(2),
                             Clear(ClearType::CurrentLine),
-                            SetForegroundColor(Color::Blue),
+                            SetForegroundColor(self.selected_foreground_color),
+                            SetBackgroundColor(self.selected_background_color),
                             Print(self.selector),
                             Print(next_line_out),
                             ResetColor,
@@ -161,7 +175,8 @@ impl<'a> Menu<'a> {
                             cursor::MoveRight(self.selector.len() as u16),
                             Print(current_line_out),
                             Clear(ClearType::CurrentLine),
-                            SetForegroundColor(Color::Blue),
+                            SetForegroundColor(self.selected_foreground_color),
+                            SetBackgroundColor(self.selected_background_color),
                             Print(self.selector),
                             Print(next_line_out),
                             ResetColor,

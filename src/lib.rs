@@ -8,6 +8,9 @@ use crossterm::style::{Print, ResetColor, SetBackgroundColor, SetForegroundColor
 use crossterm::terminal::{enable_raw_mode, Clear, ClearType};
 use std::{io::stdout, process};
 
+pub fn wait_for_input(){
+    read().unwrap();
+}
 
 pub struct Menu<'a> {
     title: &'a str,
@@ -73,7 +76,7 @@ impl<'a> Menu<'a> {
     }
 
     fn format_option(&self, index: usize) -> String {
-        format!("{}\n", self.options[index])
+        format!("{}", self.options[index])
     }
 
     fn format_title(&self) -> String {
@@ -98,6 +101,7 @@ impl<'a> Menu<'a> {
                     SetBackgroundColor(self.selected_background_color),
                     Print(self.selector),
                     Print(out),
+                    cursor::MoveToNextLine(1),
                     ResetColor
                 )
                 .unwrap();
@@ -106,7 +110,8 @@ impl<'a> Menu<'a> {
             execute!(
                 self.stdout,
                 cursor::MoveRight(self.selector.len() as u16),
-                Print(out)
+                Print(out),
+                cursor::MoveToNextLine(1),
             )
             .unwrap();
         }
@@ -149,14 +154,14 @@ impl<'a> Menu<'a> {
                             Clear(ClearType::CurrentLine),
                             cursor::MoveRight(self.selector.len() as u16),
                             Print(current_line_out),
-                            cursor::MoveToPreviousLine(2),
+                            cursor::MoveToPreviousLine(1),
                             Clear(ClearType::CurrentLine),
                             SetForegroundColor(self.selected_foreground_color),
                             SetBackgroundColor(self.selected_background_color),
                             Print(self.selector),
                             Print(next_line_out),
                             ResetColor,
-                            cursor::MoveToPreviousLine(1)
+                            cursor::MoveToColumn(1)
                         )
                         .unwrap();
                     }
@@ -174,13 +179,14 @@ impl<'a> Menu<'a> {
                             Clear(ClearType::CurrentLine),
                             cursor::MoveRight(self.selector.len() as u16),
                             Print(current_line_out),
+                            cursor::MoveToNextLine(1),
                             Clear(ClearType::CurrentLine),
                             SetForegroundColor(self.selected_foreground_color),
                             SetBackgroundColor(self.selected_background_color),
                             Print(self.selector),
                             Print(next_line_out),
+                            cursor::MoveToColumn(1),
                             ResetColor,
-                            cursor::MoveToPreviousLine(1)
                         )
                         .unwrap();
                     }

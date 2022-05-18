@@ -1,5 +1,4 @@
-use menu::{Color, Menu};
-use std::io::{stdin, Read};
+use menu::{Color, Menu, wait_for_input};
 
 fn main() {
     let options = vec![
@@ -30,7 +29,7 @@ fn main() {
         "Nested Option 5",
         "Nested Option 6",
     ];
-    let mut nested_menu = match Menu::new("Nested Menu!\n", &nested_options, 0, " > ") {
+    let mut nested_menu = match Menu::new("Nested Menu!\n", &nested_options, 0, " * ") {
         Ok(mut menu) => {
             menu.set_selected_foreground_color(Color::Green);
             menu.set_selected_background_color(Color::Black);
@@ -51,7 +50,7 @@ fn main() {
                     match selected {
                         Some(index) => {
                             println!("You selected: {}", nested_options[index]);
-                            stdin().read(&mut [0]).unwrap();
+                            wait_for_input();
                         }
                         None => {
                             break;
@@ -60,7 +59,7 @@ fn main() {
                 },
                 _ => {
                     println!("You selected: {}", options[index]);
-                    stdin().read(&mut [0]).unwrap();
+                    wait_for_input();
                 }
             },
             None => break,

@@ -1,4 +1,4 @@
-use menu::{Color, Menu, wait_for_input};
+use menu::{wait_for_input, Color, Menu};
 
 fn main() {
     let options = vec![
@@ -9,7 +9,7 @@ fn main() {
         "Option 5",
         "Option 6",
     ];
-    let mut menu = match Menu::new("Main Menu!\n", &options, 0, " > ") {
+    let mut menu = match Menu::new("Main Menu!\n", &options, 0, " > ", false) {
         Ok(mut menu) => {
             menu.set_selected_foreground_color(Color::Blue);
             menu.set_selected_background_color(Color::Black);
@@ -29,7 +29,7 @@ fn main() {
         "Nested Option 5",
         "Nested Option 6",
     ];
-    let mut nested_menu = match Menu::new("Nested Menu!\n", &nested_options, 0, " * ") {
+    let mut nested_menu = match Menu::new("Nested Menu!\n", &nested_options, 0, " * ", false) {
         Ok(mut menu) => {
             menu.set_selected_foreground_color(Color::Green);
             menu.set_selected_background_color(Color::Black);

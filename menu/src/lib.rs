@@ -32,14 +32,13 @@ impl<'a> Menu<'a> {
         ingnore_waringns: bool,
     ) -> Result<Self, String> {
         let new_line_count = title.matches('\n').count();
-        if !ingnore_waringns{
+        if !ingnore_waringns {
             if selected_index >= options.len() {
                 return Err(format!(
                     "Selected option [{}] is out of range",
                     selected_index
                 ));
             }
-    
             let console_size = termsize::get().unwrap();
             if title.len() > console_size.cols as usize {
                 return Err(String::from("Title is too long"));
@@ -59,7 +58,6 @@ impl<'a> Menu<'a> {
                 return Err(String::from("Menu will not fit on screen"));
             }
         }
-        
         Ok(Menu {
             title,
             options,
@@ -249,7 +247,7 @@ impl<'a> MultiMenu<'a> {
         ingnore_waringns: bool,
     ) -> Result<Self, String> {
         let new_line_count = title.matches('\n').count();
-        if !ingnore_waringns{
+        if !ingnore_waringns {
             if selected_selector.len() != selector.len() {
                 return Err(format!(
                     "selected_selector length must be equal to selector length"
@@ -269,7 +267,6 @@ impl<'a> MultiMenu<'a> {
                     ));
                 }
             }
-    
             let console_size = termsize::get().unwrap();
             if title.len() > console_size.cols as usize {
                 return Err(String::from("Title is too long"));

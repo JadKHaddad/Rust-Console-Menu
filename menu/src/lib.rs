@@ -12,69 +12,91 @@ pub fn wait_for_input() {
     read().unwrap();
 }
 
-pub struct Menu<'a> {
-    title: &'a str,
-    options: &'a Vec<&'a str>,
+use std::error::Error as StdError;
+
+pub struct Menu {
+    title: String,
+    options: Vec<String>,
     selected_index: usize,
     stdout: std::io::Stdout,
     new_line_count: usize,
-    selector: &'a str,
+    selector: String,
+    outer_spacing: u16,
+    inner_spacing: u16,
     selected_foreground_color: Color,
     selected_background_color: Color,
 }
 
-impl<'a> Menu<'a> {
-    pub fn new(
-        title: &'a str,
-        options: &'a Vec<&'a str>,
-        selected_index: usize,
-        selector: &'a str,
-        ingnore_waringns: bool,
-    ) -> Result<Self, String> {
-        let new_line_count = title.matches('\n').count();
-        if !ingnore_waringns {
-            if selected_index >= options.len() {
-                return Err(format!(
-                    "Selected option [{}] is out of range",
-                    selected_index
-                ));
-            }
-            let console_size = termsize::get().unwrap();
-            if title.len() > console_size.cols as usize {
-                return Err(String::from("Title is too long"));
-            }
-            for (i, option) in options.iter().enumerate() {
-                if option.len() + selector.len() > console_size.cols as usize {
-                    return Err(format!("Option [{}] is too long", i));
-                }
-                if option.contains('\n') {
-                    return Err(format!("Option [{}] contains new line", i));
-                }
-                if option.contains('\t') {
-                    return Err(format!("Option [{}] contains tab", i));
-                }
-            }
-            if 2 + new_line_count + options.len() > console_size.rows as usize {
-                return Err(String::from("Menu will not fit on screen"));
-            }
-        }
-        Ok(Menu {
-            title,
-            options,
-            selected_index: selected_index,
+impl Default for Menu {
+    fn default() -> Self {
+        Self {
             stdout: stdout(),
-            new_line_count,
-            selector,
+            title: String::from("Title"),
+            options: Vec::new(),
+            selected_index: 0,
+            new_line_count: 0,
+            selector: String::from("=>"),
+            outer_spacing: 0,
+            inner_spacing: 0,
             selected_foreground_color: Color::White,
             selected_background_color: Color::Black,
-        })
+        }
     }
-    pub fn set_selected_foreground_color(&mut self, color: Color) {
-        self.selected_foreground_color = color;
+}
+
+impl Menu {
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    pub fn set_selected_background_color(&mut self, color: Color) {
+    pub fn title(mut self, title: String) -> Self {
+        self.title = title;
+        self.new_line_count = self.title.matches('\n').count();
+        self
+    }
+
+    pub fn options(mut self, options: Vec<String>) -> Self {
+        self.options = options;
+        self
+    }
+
+    pub fn selected_index(mut self, selected_index: usize) -> Self {
+        self.selected_index = selected_index;
+        self
+    }
+
+    pub fn selector(mut self, selector: String) -> Self {
+        self.selector = selector;
+        self
+    }
+
+    pub fn outer_spacing(mut self, outer_spacing: u16) -> Self {
+        self.outer_spacing = outer_spacing;
+        let mut outer = " ".repeat(self.outer_spacing as usize);
+        outer.push_str(&self.selector);
+        self.selector = outer;
+        self
+    }
+
+    pub fn inner_spacing(mut self, inner_spacing: u16) -> Self {
+        self.inner_spacing = inner_spacing;
+        self.selector
+            .push_str(&" ".repeat(self.inner_spacing as usize));
+        self
+    }
+
+    pub fn selected_foreground_color(mut self, color: Color) -> Self {
+        self.selected_foreground_color = color;
+        self
+    }
+
+    pub fn selected_background_color(mut self, color: Color) -> Self {
         self.selected_background_color = color;
+        self
+    }
+
+    pub fn get_options(&self) -> &Vec<String> {
+        &self.options
     }
 
     fn format_option(&self, index: usize) -> String {
@@ -85,37 +107,35 @@ impl<'a> Menu<'a> {
         format!("{}\n", self.title)
     }
 
-    fn display(&mut self) {
-        let out = self.format_title();
+    fn display(&mut self) -> Result<(), Box<dyn StdError>> {
+        let title = self.format_title();
         execute!(
             self.stdout,
             Clear(ClearType::All),
             cursor::MoveTo(0, 0),
-            Print(out)
-        )
-        .unwrap();
+            Print(title)
+        )?;
         for i in 0..self.options.len() {
-            let out = self.format_option(i);
+            let option = self.format_option(i);
             if i == self.selected_index {
+                let selector = &self.selector;
                 execute!(
                     self.stdout,
                     SetForegroundColor(self.selected_foreground_color),
                     SetBackgroundColor(self.selected_background_color),
-                    Print(self.selector),
-                    Print(out),
+                    Print(selector),
+                    Print(option),
                     cursor::MoveToNextLine(1),
                     ResetColor
-                )
-                .unwrap();
+                )?;
                 continue;
             }
             execute!(
                 self.stdout,
                 cursor::MoveRight(self.selector.len() as u16),
-                Print(out),
+                Print(option),
                 cursor::MoveToNextLine(1),
-            )
-            .unwrap();
+            )?;
         }
         execute!(
             self.stdout,
@@ -123,31 +143,32 @@ impl<'a> Menu<'a> {
                 0,
                 self.selected_index as u16 + self.new_line_count as u16 + 1
             )
-        )
-        .unwrap();
+        )?;
+        Ok(())
     }
 
-    pub fn restore_console(&mut self) {
+    pub fn restore_console(&mut self) -> Result<(), Box<dyn StdError>> {
         execute!(
             self.stdout,
             Clear(ClearType::All),
             cursor::MoveTo(0, 0),
             cursor::Show,
-        )
-        .unwrap();
+        )?;
+        Ok(())
     }
 
-    pub fn run(&mut self) -> Option<usize> {
-        enable_raw_mode().unwrap();
-        execute!(self.stdout, cursor::Hide).unwrap();
-        self.display();
+    pub fn run(&mut self) -> Result<Option<usize>, Box<dyn StdError>> {
+        enable_raw_mode()?;
+        execute!(self.stdout, cursor::Hide)?;
+        self.display()?;
         loop {
-            match read().unwrap() {
+            match read()? {
                 Event::Key(KeyEvent {
                     code: KeyCode::Up,
                     modifiers: KeyModifiers::NONE,
                 }) => {
                     if self.selected_index > 0 {
+                        let selector = &self.selector;
                         let current_line_out = self.format_option(self.selected_index);
                         self.selected_index -= 1;
                         let next_line_out = self.format_option(self.selected_index);
@@ -160,12 +181,11 @@ impl<'a> Menu<'a> {
                             Clear(ClearType::CurrentLine),
                             SetForegroundColor(self.selected_foreground_color),
                             SetBackgroundColor(self.selected_background_color),
-                            Print(self.selector),
+                            Print(selector),
                             Print(next_line_out),
                             ResetColor,
                             cursor::MoveToColumn(1)
-                        )
-                        .unwrap();
+                        )?;
                     }
                 }
                 Event::Key(KeyEvent {
@@ -173,6 +193,7 @@ impl<'a> Menu<'a> {
                     modifiers: KeyModifiers::NONE,
                 }) => {
                     if self.selected_index < self.options.len() - 1 {
+                        let selector = &self.selector;
                         let current_line_out = self.format_option(self.selected_index);
                         self.selected_index += 1;
                         let next_line_out = self.format_option(self.selected_index);
@@ -185,12 +206,11 @@ impl<'a> Menu<'a> {
                             Clear(ClearType::CurrentLine),
                             SetForegroundColor(self.selected_foreground_color),
                             SetBackgroundColor(self.selected_background_color),
-                            Print(self.selector),
+                            Print(selector),
                             Print(next_line_out),
                             cursor::MoveToColumn(1),
                             ResetColor,
-                        )
-                        .unwrap();
+                        )?;
                     }
                 }
                 Event::Key(KeyEvent {
@@ -201,21 +221,21 @@ impl<'a> Menu<'a> {
                     code: KeyCode::Esc,
                     modifiers: KeyModifiers::NONE,
                 }) => {
-                    self.restore_console();
-                    return None;
+                    self.restore_console()?;
+                    return Ok(None);
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Char('c'),
                     modifiers: KeyModifiers::CONTROL,
                 }) => {
-                    self.restore_console();
+                    self.restore_console()?;
                     process::exit(0);
                 }
                 _ => continue,
             }
         }
-        self.restore_console();
-        Some(self.selected_index)
+        self.restore_console()?;
+        Ok(Some(self.selected_index))
     }
 }
 

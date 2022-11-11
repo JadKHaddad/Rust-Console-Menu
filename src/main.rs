@@ -1,14 +1,19 @@
 use menu::Menu;
 fn main() {
     let mut menu = Menu::new()
-        .title("How would you like to do this?\n".to_owned())
+        .title("How are you today?".to_owned())
         .inner_spacing(1)
         .outer_spacing(0)
+        .selected_foreground_color(menu::Color::Yellow)
+        .selected_background_color(menu::Color::Black)
         .options(vec![
-            "Option 1".to_owned(),
-            "Option 2".to_owned(),
-            "Option 3".to_owned(),
-        ]);
+            ":>",
+            ":D",
+            ":/",
+            ":(",
+            ":)",
+        ])
+        .selected_index(1).unwrap();
     let res = menu.run().unwrap();
     if let Some(index) = res {
         println!("You selected: {}", menu.get_options()[index]);

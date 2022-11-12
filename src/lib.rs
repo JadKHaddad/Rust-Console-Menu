@@ -73,24 +73,6 @@ where
         self
     }
 
-    fn outer_spacing(mut self, outer_spacing: u16) -> Self {
-        let mut_menu = self.get_menu_mut();
-        mut_menu.outer_spacing = outer_spacing;
-        let mut outer = " ".repeat(mut_menu.outer_spacing as usize);
-        outer.push_str(&mut_menu.selector);
-        mut_menu.selector = outer;
-        self
-    }
-
-    fn inner_spacing(mut self, inner_spacing: u16) -> Self {
-        let mut_menu = self.get_menu_mut();
-        mut_menu.inner_spacing = inner_spacing;
-        mut_menu
-            .selector
-            .push_str(&" ".repeat(inner_spacing as usize));
-        self
-    }
-
     fn selected_foreground_color(mut self, color: Color) -> Self {
         let mut_menu = self.get_menu_mut();
         mut_menu.selected_foreground_color = color;
@@ -127,11 +109,7 @@ where
         let mut_menu = self.get_menu_mut();
         disable_raw_mode()?;
         let dist = mut_menu.options.len() as u16 - mut_menu.selected_index as u16;
-        execute!(
-            mut_menu.stdout,
-            cursor::MoveToNextLine(dist),
-            cursor::Show,
-        )?;
+        execute!(mut_menu.stdout, cursor::MoveToNextLine(dist), cursor::Show,)?;
         Ok(())
     }
 
@@ -177,7 +155,7 @@ where
         Ok(())
     }
 
-    fn run(&mut self) -> Result<Option<usize>, Box<dyn StdError>> {
+    fn run(&mut self) -> Result<Option<HashSet<usize>>, Box<dyn StdError>> {
         let mut_menu = self.get_menu_mut();
 
         mut_menu.setup_console()?;
@@ -260,7 +238,9 @@ where
             }
         }
         mut_menu.restore_console()?;
-        Ok(Some(mut_menu.get_menu().selected_index))
+        let mut selected = HashSet::new();
+        selected.insert(mut_menu.selected_index);
+        Ok(Some(selected))
     }
 
     fn wait_for_input() -> Result<(), Box<dyn StdError>> {
@@ -292,8 +272,6 @@ where
     stdout: std::io::Stdout,
     new_line_count: usize,
     selector: String,
-    outer_spacing: u16,
-    inner_spacing: u16,
     selected_foreground_color: Color,
     selected_background_color: Color,
 }
@@ -310,8 +288,6 @@ where
             selected_index: 0,
             new_line_count: 0,
             selector: String::from("=>"),
-            outer_spacing: 0,
-            inner_spacing: 0,
             selected_foreground_color: Color::Reset,
             selected_background_color: Color::Reset,
         }
@@ -322,18 +298,9 @@ pub struct MultiMenu<T>
 where
     T: StdDisplay,
 {
-    title: String,
-    options: Vec<T>,
-    selected_index: usize,
+    menu: Menu<T>,
     selected_options: HashSet<usize>,
-    stdout: std::io::Stdout,
-    new_line_count: usize,
-    selector: String,
     selected_selector: String,
-    outer_spacing: u16,
-    inner_spacing: u16,
-    selected_foreground_color: Color,
-    selected_background_color: Color,
     selected_option_foreground_color: Color,
     selected_option_background_color: Color,
     selected_selected_option_foreground_color: Color,
@@ -345,18 +312,9 @@ where
 {
     fn default() -> Self {
         Self {
-            stdout: stdout(),
-            title: String::from("Title"),
-            options: Vec::new(),
-            selected_index: 0,
+            menu: Menu::default(),
             selected_options: HashSet::new(),
-            new_line_count: 0,
-            selector: String::from("=>"),
             selected_selector: String::from("->"),
-            outer_spacing: 0,
-            inner_spacing: 0,
-            selected_foreground_color: Color::Reset,
-            selected_background_color: Color::Reset,
             selected_option_foreground_color: Color::Reset,
             selected_option_background_color: Color::Reset,
             selected_selected_option_foreground_color: Color::Reset,
@@ -364,138 +322,45 @@ where
         }
     }
 }
-impl<T> MultiMenu<T>
+
+impl<'a, T> MenuLike<'a, T> for MultiMenu<T>
 where
-    T: StdDisplay,
+    T: StdDisplay + 'a,
+    Self: Sized,
 {
-    pub fn new() -> Self {
-        Self::default()
+    fn get_menu_mut(&mut self) -> &mut Menu<T> {
+        &mut self.menu
     }
 
-    pub fn title(mut self, title: String) -> Self {
-        self.title = title;
-        self.new_line_count = self.title.matches('\n').count();
-        self
+    fn get_menu(&self) -> &Menu<T> {
+        self.menu.get_menu()
     }
 
-    pub fn options(mut self, options: Vec<T>) -> Self {
-        self.options = options;
-        self
-    }
+    fn display(&mut self) -> Result<(), Box<dyn StdError>> {
+        let selected_selector = &self.selected_selector.clone();
+        let selected_options = self.selected_options.clone();
+        let selected_option_foreground_color = self.selected_option_foreground_color;
+        let selected_option_background_color = self.selected_option_background_color;
+        let selected_selected_option_foreground_color =
+            self.selected_selected_option_foreground_color;
+        let selected_selected_option_background_color =
+            self.selected_selected_option_background_color;
 
-    pub fn selected_index(mut self, selected_index: usize) -> Result<Self, MenuError> {
-        if selected_index >= self.options.len() {
-            return Err(MenuError::IndexOutOfBounds);
-        }
-        self.selected_index = selected_index;
-        Ok(self)
-    }
+        let mut_menu = self.get_menu_mut();
 
-    //
-    pub fn selected_options(mut self, selected_options: HashSet<usize>) -> Result<Self, MenuError> {
-        for index in selected_options.iter() {
-            if *index >= self.options.len() {
-                return Err(MenuError::IndexOutOfBounds);
-            }
-        }
-        self.selected_options = selected_options;
-        Ok(self)
-    }
-
-    pub fn selector(mut self, selector: String) -> Self {
-        self.selector = selector;
-        self
-    }
-
-    // //TODO selector and selected_selector must be the same length
-    pub fn selected_selector(mut self, selected_selector: String) -> Self {
-        self.selected_selector = selected_selector;
-        self
-    }
-
-    //
-    pub fn outer_spacing(mut self, outer_spacing: u16) -> Self {
-        self.outer_spacing = outer_spacing;
-        let mut outer_selector = " ".repeat(self.outer_spacing as usize);
-        let mut outer_selected_selector = outer_selector.clone();
-        outer_selector.push_str(&self.selector);
-        outer_selected_selector.push_str(&self.selected_selector);
-        self.selector = outer_selector;
-        self.selected_selector = outer_selected_selector;
-        self
-    }
-
-    //
-    pub fn inner_spacing(mut self, inner_spacing: u16) -> Self {
-        self.inner_spacing = inner_spacing;
-        self.selector
-            .push_str(&" ".repeat(self.inner_spacing as usize));
-        self.selected_selector
-            .push_str(&" ".repeat(self.inner_spacing as usize));
-        self
-    }
-
-    pub fn selected_foreground_color(mut self, color: Color) -> Self {
-        self.selected_foreground_color = color;
-        self
-    }
-
-    pub fn selected_background_color(mut self, color: Color) -> Self {
-        self.selected_background_color = color;
-        self
-    }
-
-    //
-    pub fn selected_option_foreground_color(mut self, color: Color) -> Self {
-        self.selected_option_foreground_color = color;
-        self
-    }
-    //
-    pub fn selected_option_background_color(mut self, color: Color) -> Self {
-        self.selected_option_background_color = color;
-        self
-    }
-    //
-    pub fn selected_selected_option_foreground_color(mut self, color: Color) -> Self {
-        self.selected_selected_option_foreground_color = color;
-        self
-    }
-    //
-    pub fn selected_selected_option_background_color(mut self, color: Color) -> Self {
-        self.selected_selected_option_background_color = color;
-        self
-    }
-
-    pub fn get_title(&self) -> &String {
-        &self.title
-    }
-
-    pub fn get_options(&self) -> &Vec<T> {
-        &self.options
-    }
-
-    fn format_option(&self, index: usize) -> String {
-        format!("{}", self.options[index])
-    }
-
-    fn format_title(&self) -> String {
-        format!("{}\n", self.title)
-    }
-
-    //
-    pub fn display(&mut self) -> Result<(), Box<dyn StdError>> {
-        let title = self.format_title();
+        let title = mut_menu.format_title();
         print!("{}", title);
-        let selector = &self.selector;
-        let selected_selector = &self.selected_selector;
-        for i in 0..self.options.len() {
-            let option = self.format_option(i);
-            if i == self.selected_index {
-                if self.selected_options.contains(&i) {
+        for i in 0..mut_menu.options.len() {
+            let option = mut_menu.format_option(i);
+            if i == mut_menu.selected_index {
+                let selector = &mut_menu.selector;
+                let selected_foreground_color = mut_menu.selected_foreground_color;
+                let selected_background_color = mut_menu.selected_background_color;
+                if selected_options.contains(&i) {
                     execute!(
-                        self.stdout,
-                        SetForegroundColor(self.selected_selected_option_foreground_color),
-                        SetBackgroundColor(self.selected_selected_option_background_color),
+                        mut_menu.stdout,
+                        SetForegroundColor(selected_selected_option_foreground_color),
+                        SetBackgroundColor(selected_selected_option_background_color),
                         Print(selector),
                         Print(option),
                         ResetColor,
@@ -504,9 +369,9 @@ where
                     continue;
                 }
                 execute!(
-                    self.stdout,
-                    SetForegroundColor(self.selected_foreground_color),
-                    SetBackgroundColor(self.selected_background_color),
+                    mut_menu.stdout,
+                    SetForegroundColor(selected_foreground_color),
+                    SetBackgroundColor(selected_background_color),
                     Print(selector),
                     Print(option),
                     ResetColor,
@@ -514,11 +379,11 @@ where
                 )?;
                 continue;
             }
-            if self.selected_options.contains(&i) {
+            if selected_options.contains(&i) {
                 execute!(
-                    self.stdout,
-                    SetForegroundColor(self.selected_option_foreground_color),
-                    SetBackgroundColor(self.selected_option_background_color),
+                    mut_menu.stdout,
+                    SetForegroundColor(selected_option_foreground_color),
+                    SetBackgroundColor(selected_option_background_color),
                     Print(selected_selector),
                     Print(option),
                     ResetColor,
@@ -526,57 +391,55 @@ where
                 )?;
                 continue;
             }
+            let dist = mut_menu.selector.len() as u16;
             execute!(
-                self.stdout,
-                cursor::MoveRight(self.selector.len() as u16),
+                mut_menu.stdout,
+                cursor::MoveRight(dist),
                 Print(option),
                 Print("\n"),
             )?;
         }
-        execute!(
-            self.stdout,
-            cursor::MoveToPreviousLine((self.options.len() - self.selected_index) as u16),
-        )?;
+        let dist = (mut_menu.options.len() - mut_menu.selected_index) as u16;
+        execute!(mut_menu.stdout, cursor::MoveToPreviousLine(dist),)?;
         Ok(())
     }
 
-    fn restore_console(&mut self) -> Result<(), Box<dyn StdError>> {
-        disable_raw_mode()?;
-        execute!(
-            self.stdout,
-            cursor::MoveToNextLine(self.options.len() as u16 - self.selected_index as u16),
-            cursor::Show,
-        )?;
-        Ok(())
-    }
+    fn run(&mut self) -> Result<Option<HashSet<usize>>, Box<dyn StdError>> {
+        let selected_selector = &self.selected_selector.clone();
+        let mut selected_options = self.selected_options.clone();
+        let selected_option_foreground_color = self.selected_option_foreground_color;
+        let selected_option_background_color = self.selected_option_background_color;
+        let selected_selected_option_foreground_color =
+            self.selected_selected_option_foreground_color;
+        let selected_selected_option_background_color =
+            self.selected_selected_option_background_color;
 
-    fn setup_console(&mut self) -> Result<(), Box<dyn StdError>> {
-        enable_raw_mode()?;
-        execute!(self.stdout, cursor::Hide)?;
-        Ok(())
-    }
+        let mut_menu = self.get_menu_mut();
 
-    pub fn run(&mut self) -> Result<Option<HashSet<usize>>, Box<dyn StdError>> {
-        self.setup_console()?;
-        self.display()?;
-        let selector = &self.selector;
-        let selected_selector = &self.selected_selector;
+        mut_menu.setup_console()?;
+        mut_menu.display()?;
+        let selector = &mut_menu.selector;
+        let selected_foreground_color = mut_menu.selected_foreground_color;
+        let selected_background_color = mut_menu.selected_background_color;
+
+        let dist = mut_menu.selector.len() as u16;
+
         loop {
             match read()? {
                 Event::Key(KeyEvent {
                     code: KeyCode::Up,
                     modifiers: KeyModifiers::NONE,
                 }) => {
-                    if self.selected_index > 0 {
-                        let current_line_out = self.format_option(self.selected_index);
-                        self.selected_index -= 1;
-                        let next_line_out = self.format_option(self.selected_index);
-                        if self.selected_options.contains(&(self.selected_index + 1)) {
+                    if mut_menu.selected_index > 0 {
+                        let current_line_out = mut_menu.format_option(mut_menu.selected_index);
+                        mut_menu.selected_index -= 1;
+                        let next_line_out = mut_menu.format_option(mut_menu.selected_index);
+                        if selected_options.contains(&(mut_menu.selected_index + 1)) {
                             execute!(
-                                self.stdout,
+                                mut_menu.stdout,
                                 Clear(ClearType::CurrentLine),
-                                SetForegroundColor(self.selected_option_foreground_color),
-                                SetBackgroundColor(self.selected_option_background_color),
+                                SetForegroundColor(selected_option_foreground_color),
+                                SetBackgroundColor(selected_option_background_color),
                                 Print(selected_selector),
                                 Print(current_line_out),
                                 cursor::MoveToPreviousLine(1),
@@ -584,19 +447,19 @@ where
                             )?;
                         } else {
                             execute!(
-                                self.stdout,
+                                mut_menu.stdout,
                                 Clear(ClearType::CurrentLine),
-                                cursor::MoveRight(self.selector.len() as u16),
+                                cursor::MoveRight(dist),
                                 Print(current_line_out),
                                 cursor::MoveToPreviousLine(1)
                             )?;
                         }
-                        if self.selected_options.contains(&self.selected_index) {
+                        if selected_options.contains(&mut_menu.selected_index) {
                             execute!(
-                                self.stdout,
+                                mut_menu.stdout,
                                 Clear(ClearType::CurrentLine),
-                                SetForegroundColor(self.selected_selected_option_foreground_color),
-                                SetBackgroundColor(self.selected_selected_option_background_color),
+                                SetForegroundColor(selected_selected_option_foreground_color),
+                                SetBackgroundColor(selected_selected_option_background_color),
                                 Print(selector),
                                 Print(next_line_out),
                                 ResetColor,
@@ -604,9 +467,9 @@ where
                             )?;
                         } else {
                             execute!(
-                                self.stdout,
-                                SetForegroundColor(self.selected_foreground_color),
-                                SetBackgroundColor(self.selected_background_color),
+                                mut_menu.stdout,
+                                SetForegroundColor(selected_foreground_color),
+                                SetBackgroundColor(selected_foreground_color),
                                 Print(selector),
                                 Print(next_line_out),
                                 ResetColor,
@@ -619,16 +482,16 @@ where
                     code: KeyCode::Down,
                     modifiers: KeyModifiers::NONE,
                 }) => {
-                    if self.selected_index < self.options.len() - 1 {
-                        let current_line_out = self.format_option(self.selected_index);
-                        self.selected_index += 1;
-                        let next_line_out = self.format_option(self.selected_index);
-                        if self.selected_options.contains(&(self.selected_index - 1)) {
+                    if mut_menu.selected_index < mut_menu.options.len() - 1 {
+                        let current_line_out = mut_menu.format_option(mut_menu.selected_index);
+                        mut_menu.selected_index += 1;
+                        let next_line_out = mut_menu.format_option(mut_menu.selected_index);
+                        if selected_options.contains(&(mut_menu.selected_index - 1)) {
                             execute!(
-                                self.stdout,
+                                mut_menu.stdout,
                                 Clear(ClearType::CurrentLine),
-                                SetForegroundColor(self.selected_option_foreground_color),
-                                SetBackgroundColor(self.selected_option_background_color),
+                                SetForegroundColor(selected_option_foreground_color),
+                                SetBackgroundColor(selected_option_background_color),
                                 Print(selected_selector),
                                 Print(current_line_out),
                                 cursor::MoveToNextLine(1),
@@ -636,19 +499,19 @@ where
                             )?;
                         } else {
                             execute!(
-                                self.stdout,
+                                mut_menu.stdout,
                                 Clear(ClearType::CurrentLine),
-                                cursor::MoveRight(self.selector.len() as u16),
+                                cursor::MoveRight(dist),
                                 Print(current_line_out),
                                 cursor::MoveToNextLine(1)
                             )?;
                         }
-                        if self.selected_options.contains(&self.selected_index) {
+                        if selected_options.contains(&mut_menu.selected_index) {
                             execute!(
-                                self.stdout,
+                                mut_menu.stdout,
                                 Clear(ClearType::CurrentLine),
-                                SetForegroundColor(self.selected_selected_option_foreground_color),
-                                SetBackgroundColor(self.selected_selected_option_background_color),
+                                SetForegroundColor(selected_selected_option_foreground_color),
+                                SetBackgroundColor(selected_selected_option_background_color),
                                 Print(selector),
                                 Print(next_line_out),
                                 ResetColor,
@@ -656,9 +519,9 @@ where
                             )?;
                         } else {
                             execute!(
-                                self.stdout,
-                                SetForegroundColor(self.selected_foreground_color),
-                                SetBackgroundColor(self.selected_background_color),
+                                mut_menu.stdout,
+                                SetForegroundColor(selected_foreground_color),
+                                SetBackgroundColor(selected_background_color),
                                 Print(selector),
                                 Print(next_line_out),
                                 ResetColor,
@@ -671,31 +534,31 @@ where
                     code: KeyCode::Char(' '),
                     modifiers: KeyModifiers::NONE,
                 }) => {
-                    let out = self.format_option(self.selected_index);
-                    if self.selected_options.contains(&self.selected_index) {
+                    let out = mut_menu.format_option(mut_menu.selected_index);
+                    if selected_options.contains(&mut_menu.selected_index) {
                         execute!(
-                            self.stdout,
+                            mut_menu.stdout,
                             Clear(ClearType::CurrentLine),
-                            SetForegroundColor(self.selected_foreground_color),
-                            SetBackgroundColor(self.selected_background_color),
+                            SetForegroundColor(selected_foreground_color),
+                            SetBackgroundColor(selected_background_color),
                             Print(selector),
                             Print(out),
                             ResetColor,
                             cursor::MoveToColumn(1)
                         )?;
-                        self.selected_options.remove(&self.selected_index);
+                        selected_options.remove(&mut_menu.selected_index);
                     } else {
                         execute!(
-                            self.stdout,
+                            mut_menu.stdout,
                             Clear(ClearType::CurrentLine),
-                            SetForegroundColor(self.selected_selected_option_foreground_color),
-                            SetBackgroundColor(self.selected_selected_option_background_color),
+                            SetForegroundColor(selected_selected_option_foreground_color),
+                            SetBackgroundColor(selected_selected_option_background_color),
                             Print(selector),
                             Print(out),
                             ResetColor,
                             cursor::MoveToColumn(1)
                         )?;
-                        self.selected_options.insert(self.selected_index);
+                        selected_options.insert(mut_menu.selected_index);
                     }
                 }
                 Event::Key(KeyEvent {
@@ -720,9 +583,53 @@ where
             }
         }
         self.restore_console()?;
-        if self.selected_options.is_empty() {
+        if selected_options.is_empty() {
             return Ok(None);
         }
-        Ok(Some(self.selected_options.clone()))
+        Ok(Some(selected_options))
+    }
+}
+
+impl<T> MultiMenu<T>
+where
+    T: StdDisplay,
+{
+    //
+    pub fn selected_options(mut self, selected_options: HashSet<usize>) -> Result<Self, MenuError> {
+        let mut_menu = self.get_menu_mut();
+        for index in selected_options.iter() {
+            if *index >= mut_menu.options.len() {
+                return Err(MenuError::IndexOutOfBounds);
+            }
+        }
+        self.selected_options = selected_options;
+        Ok(self)
+    }
+
+    // //TODO selector and selected_selector must be the same length
+    pub fn selected_selector(mut self, selected_selector: String) -> Self {
+        self.selected_selector = selected_selector;
+        self
+    }
+
+    //
+    pub fn selected_option_foreground_color(mut self, color: Color) -> Self {
+        self.selected_option_foreground_color = color;
+        self
+    }
+    //
+    pub fn selected_option_background_color(mut self, color: Color) -> Self {
+        self.selected_option_background_color = color;
+        self
+    }
+    //
+    pub fn selected_selected_option_foreground_color(mut self, color: Color) -> Self {
+        self.selected_selected_option_foreground_color = color;
+        self
+    }
+    //
+    pub fn selected_selected_option_background_color(mut self, color: Color) -> Self {
+        self.selected_selected_option_background_color = color;
+        self
     }
 }

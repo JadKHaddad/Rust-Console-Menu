@@ -32,65 +32,52 @@ impl StdError for MenuError {
     }
 }
 
-pub trait MenuLike<'a, T>
-where
-    T: StdDisplay + 'a,
-    Self: Sized + Default,
-{
-    fn get_menu_mut(&mut self) -> &mut Menu<T>;
+pub trait MenuLike {
+    fn get_menu_mut(&mut self) -> &mut Menu;
 
-    fn get_menu(&self) -> &Menu<T>;
+    fn get_menu(&self) -> &Menu;
 
-    fn new() -> Self {
-        Default::default()
-    }
-
-    fn title(mut self, title: String) -> Self {
+    fn title(&mut self, title: String) {
         let mut_menu = self.get_menu_mut();
         mut_menu.title = title;
         mut_menu.new_line_count = mut_menu.title.matches('\n').count();
-        self
     }
 
-    fn options(mut self, options: Vec<T>) -> Self {
+    fn options(&mut self, options: Vec<String>) {
         let mut_menu = self.get_menu_mut();
         mut_menu.options = options;
-        self
     }
 
-    fn selected_index(mut self, selected_index: usize) -> Result<Self, MenuError> {
+    fn selected_index(&mut self, selected_index: usize) {
         let mut_menu = self.get_menu_mut();
         if selected_index >= mut_menu.options.len() {
-            return Err(MenuError::IndexOutOfBounds);
+            mut_menu.selected_index = 0;
+        } else {
+            mut_menu.selected_index = selected_index;
         }
-        mut_menu.selected_index = selected_index;
-        Ok(self)
     }
 
-    fn selector(mut self, selector: String) -> Self {
+    fn selector(&mut self, selector: String) {
         let mut_menu = self.get_menu_mut();
         mut_menu.selector = selector;
-        self
     }
 
-    fn selected_foreground_color(mut self, color: Color) -> Self {
+    fn selected_foreground_color(&mut self, color: Color) {
         let mut_menu = self.get_menu_mut();
         mut_menu.selected_foreground_color = color;
-        self
     }
 
-    fn selected_background_color(mut self, color: Color) -> Self {
+    fn selected_background_color(&mut self, color: Color) {
         let mut_menu = self.get_menu_mut();
         mut_menu.selected_background_color = color;
-        self
     }
 
-    fn get_title(&'a self) -> &String {
+    fn get_title(&self) -> &String {
         let menu = self.get_menu();
         &menu.title
     }
 
-    fn get_options(&self) -> &Vec<T> {
+    fn get_options(&self) -> &Vec<String> {
         let menu = self.get_menu();
         &menu.options
     }
@@ -242,32 +229,20 @@ where
         selected.insert(mut_menu.selected_index);
         Ok(Some(selected))
     }
-
-    fn wait_for_input() -> Result<(), Box<dyn StdError>> {
-        read()?;
-        Ok(())
-    }
 }
 
-impl<'a, T> MenuLike<'a, T> for Menu<T>
-where
-    T: StdDisplay + 'a,
-    Self: Sized,
-{
-    fn get_menu_mut(&mut self) -> &mut Menu<T> {
+impl MenuLike for Menu {
+    fn get_menu_mut(&mut self) -> &mut Menu {
         self
     }
 
-    fn get_menu(&self) -> &Menu<T> {
+    fn get_menu(&self) -> &Menu {
         self
     }
 }
-pub struct Menu<T>
-where
-    T: StdDisplay,
-{
+pub struct Menu {
     title: String,
-    options: Vec<T>,
+    options: Vec<String>,
     selected_index: usize,
     stdout: std::io::Stdout,
     new_line_count: usize,
@@ -276,29 +251,47 @@ where
     selected_background_color: Color,
 }
 
-impl<T> Default for Menu<T>
-where
-    T: StdDisplay,
-{
+impl Menu {
+    pub fn new(
+        title: String,
+        options: Vec<String>,
+        selected_index: usize,
+        selector: String,
+        selected_foreground_color: Color,
+        selected_background_color: Color,
+    ) -> Menu {
+        let mut menu = Menu::default();
+        menu.title(title);
+        menu.options(options);
+        menu.selected_index(selected_index);
+        menu.selector(selector);
+        menu.selected_foreground_color(selected_foreground_color);
+        menu.selected_background_color(selected_background_color);
+        menu
+    }
+}
+
+impl Default for Menu {
     fn default() -> Self {
         Self {
             stdout: stdout(),
-            title: String::from("Title"),
-            options: Vec::new(),
+            title: String::from("Single Select Menu"),
+            options: vec![
+                String::from("Option 1"),
+                String::from("Option 2"),
+                String::from("Option 3"),
+            ],
             selected_index: 0,
             new_line_count: 0,
-            selector: String::from("=>"),
+            selector: String::from("=> "),
             selected_foreground_color: Color::Reset,
             selected_background_color: Color::Reset,
         }
     }
 }
 
-pub struct MultiMenu<T>
-where
-    T: StdDisplay,
-{
-    menu: Menu<T>,
+pub struct MultiMenu {
+    menu: Menu,
     selected_options: HashSet<usize>,
     selected_selector: String,
     selected_option_foreground_color: Color,
@@ -306,15 +299,45 @@ where
     selected_selected_option_foreground_color: Color,
     selected_selected_option_background_color: Color,
 }
-impl<T> Default for MultiMenu<T>
-where
-    T: StdDisplay,
-{
+
+impl MultiMenu {
+    pub fn new(
+        title: String,
+        options: Vec<String>,
+        selected_options: HashSet<usize>,
+        selector: String,
+        selected_selector: String,
+        selected_foreground_color: Color,
+        selected_background_color: Color,
+        selected_option_foreground_color: Color,
+        selected_option_background_color: Color,
+        selected_selected_option_foreground_color: Color,
+        selected_selected_option_background_color: Color,
+    ) -> MultiMenu {
+        let mut menu = MultiMenu::default();
+        menu.title(title);
+        menu.options(options);
+        menu.selected_options(selected_options);
+        menu.selector(selector);
+        menu.selected_selector(selected_selector);
+        menu.selected_foreground_color(selected_foreground_color);
+        menu.selected_background_color(selected_background_color);
+        menu.selected_option_foreground_color(selected_option_foreground_color);
+        menu.selected_option_background_color(selected_option_background_color);
+        menu.selected_selected_option_foreground_color(selected_selected_option_foreground_color);
+        menu.selected_selected_option_background_color(selected_selected_option_background_color);
+        menu
+    }
+}
+
+impl Default for MultiMenu {
     fn default() -> Self {
+        let mut menu = Menu::default();
+        menu.title(String::from("Multi Select Menu"));
         Self {
-            menu: Menu::default(),
+            menu,
             selected_options: HashSet::new(),
-            selected_selector: String::from("->"),
+            selected_selector: String::from("-> "),
             selected_option_foreground_color: Color::Reset,
             selected_option_background_color: Color::Reset,
             selected_selected_option_foreground_color: Color::Reset,
@@ -323,16 +346,12 @@ where
     }
 }
 
-impl<'a, T> MenuLike<'a, T> for MultiMenu<T>
-where
-    T: StdDisplay + 'a,
-    Self: Sized,
-{
-    fn get_menu_mut(&mut self) -> &mut Menu<T> {
+impl MenuLike for MultiMenu {
+    fn get_menu_mut(&mut self) -> &mut Menu {
         &mut self.menu
     }
 
-    fn get_menu(&self) -> &Menu<T> {
+    fn get_menu(&self) -> &Menu {
         self.menu.get_menu()
     }
 
@@ -590,46 +609,32 @@ where
     }
 }
 
-impl<T> MultiMenu<T>
-where
-    T: StdDisplay,
-{
-    //
-    pub fn selected_options(mut self, selected_options: HashSet<usize>) -> Result<Self, MenuError> {
+impl MultiMenu {
+    pub fn selected_options(&mut self, selected_options: HashSet<usize>) {
         let mut_menu = self.get_menu_mut();
-        for index in selected_options.iter() {
-            if *index >= mut_menu.options.len() {
-                return Err(MenuError::IndexOutOfBounds);
-            }
-        }
+        let options_len = mut_menu.options.len().clone();
         self.selected_options = selected_options;
-        Ok(self)
+        self.selected_options.retain(|index| *index < options_len);
     }
 
-    // //TODO selector and selected_selector must be the same length
-    pub fn selected_selector(mut self, selected_selector: String) -> Self {
+    //TODO selector and selected_selector must be the same length
+    pub fn selected_selector(&mut self, selected_selector: String) {
         self.selected_selector = selected_selector;
-        self
     }
 
-    //
-    pub fn selected_option_foreground_color(mut self, color: Color) -> Self {
+    pub fn selected_option_foreground_color(&mut self, color: Color) {
         self.selected_option_foreground_color = color;
-        self
     }
-    //
-    pub fn selected_option_background_color(mut self, color: Color) -> Self {
+
+    pub fn selected_option_background_color(&mut self, color: Color) {
         self.selected_option_background_color = color;
-        self
     }
-    //
-    pub fn selected_selected_option_foreground_color(mut self, color: Color) -> Self {
+
+    pub fn selected_selected_option_foreground_color(&mut self, color: Color) {
         self.selected_selected_option_foreground_color = color;
-        self
     }
-    //
-    pub fn selected_selected_option_background_color(mut self, color: Color) -> Self {
+
+    pub fn selected_selected_option_background_color(&mut self, color: Color) {
         self.selected_selected_option_background_color = color;
-        self
     }
 }

@@ -8,34 +8,12 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
 };
 use std::error::Error as StdError;
-use std::fmt::Display as StdDisplay;
 use std::io::{stdout, Write};
 use std::{collections::HashSet, process};
-
-#[derive(Debug)]
-pub enum MenuError {
-    IndexOutOfBounds,
-}
 
 pub enum Direction {
     Up,
     Down,
-}
-
-impl StdDisplay for MenuError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            MenuError::IndexOutOfBounds => write!(f, "Index out of bounds"),
-        }
-    }
-}
-
-impl StdError for MenuError {
-    fn description(&self) -> &str {
-        match self {
-            MenuError::IndexOutOfBounds => "Index out of bounds",
-        }
-    }
 }
 
 pub trait MenuLike {
@@ -196,11 +174,12 @@ pub trait MenuLike {
         Ok(())
     }
 
-    fn on_break_key(&mut self) -> Result<Option<HashSet<usize>>, Box<dyn StdError>> {
+    fn on_break(&mut self) -> Result<Option<HashSet<usize>>, Box<dyn StdError>> {
         let mut selected = HashSet::new();
         selected.insert(self.get_selected_index());
         Ok(Some(selected))
     }
+    
     fn display(&mut self) -> Result<(), Box<dyn StdError>> {
         let mut_menu = self.get_menu_mut();
 
@@ -284,7 +263,7 @@ pub trait MenuLike {
             self.get_menu_mut().stdout.flush()?;
         }
         self.restore_console()?;
-        self.on_break_key()
+        self.on_break()
     }
 }
 
@@ -508,35 +487,33 @@ impl MenuLike for MultiMenu {
         let selected_foreground_color = mut_menu.selected_foreground_color;
         let selected_background_color = mut_menu.selected_background_color;
         let option = mut_menu.format_option(mut_menu.selected_index);
+        queue!(mut_menu.stdout, Clear(ClearType::CurrentLine))?;
         if mut_menu.selected_options.contains(&mut_menu.selected_index) {
-            execute!(
+            queue!(
                 mut_menu.stdout,
-                Clear(ClearType::CurrentLine),
                 SetForegroundColor(selected_foreground_color),
                 SetBackgroundColor(selected_background_color),
-                Print(selector),
-                Print(option),
-                ResetColor,
-                cursor::MoveToColumn(1)
             )?;
             mut_menu.selected_options.remove(&mut_menu.selected_index);
         } else {
-            execute!(
+            queue!(
                 mut_menu.stdout,
-                Clear(ClearType::CurrentLine),
                 SetForegroundColor(selected_selected_option_foreground_color),
                 SetBackgroundColor(selected_selected_option_background_color),
-                Print(selector),
-                Print(option),
-                ResetColor,
-                cursor::MoveToColumn(1)
             )?;
             mut_menu.selected_options.insert(mut_menu.selected_index);
         }
+        queue!(
+            mut_menu.stdout,
+            Print(selector),
+            Print(option),
+            ResetColor,
+            cursor::MoveToColumn(1)
+        )?;
         Ok(())
     }
 
-    fn on_break_key(&mut self) -> Result<Option<HashSet<usize>>, Box<dyn StdError>> {
+    fn on_break(&mut self) -> Result<Option<HashSet<usize>>, Box<dyn StdError>> {
         if self.get_selected_options().is_empty() {
             return Ok(None);
         }

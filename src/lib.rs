@@ -176,7 +176,7 @@ pub trait MenuLike {
             let current_line_out = mut_menu.format_option(mut_menu.selected_index);
             mut_menu.selected_index -= 1;
             let next_line_out = mut_menu.format_option(mut_menu.selected_index);
-            mut_menu.move_with_direction(Direction::Up, current_line_out, next_line_out)?;
+            self.move_with_direction(Direction::Up, current_line_out, next_line_out)?;
         }
         Ok(())
     }
@@ -187,7 +187,7 @@ pub trait MenuLike {
             let current_line_out = mut_menu.format_option(mut_menu.get_menu().selected_index);
             mut_menu.selected_index += 1;
             let next_line_out = mut_menu.format_option(mut_menu.get_menu().selected_index);
-            mut_menu.move_with_direction(Direction::Down, current_line_out, next_line_out)?;
+            self.move_with_direction(Direction::Down, current_line_out, next_line_out)?;
         }
         Ok(())
     }
@@ -495,28 +495,6 @@ impl MenuLike for MultiMenu {
             cursor::MoveToColumn(1)
         )?;
 
-        Ok(())
-    }
-
-    fn on_up_key(&mut self) -> Result<(), Box<dyn StdError>> {
-        let mut_menu = self.get_menu_mut();
-        if mut_menu.selected_index > 0 {
-            let current_line_out = mut_menu.format_option(mut_menu.selected_index);
-            mut_menu.selected_index -= 1;
-            let next_line_out = mut_menu.format_option(mut_menu.selected_index);
-            self.move_with_direction(Direction::Up, current_line_out, next_line_out)?;
-        }
-        Ok(())
-    }
-
-    fn on_down_key(&mut self) -> Result<(), Box<dyn StdError>> {
-        let mut_menu = self.get_menu_mut();
-        if mut_menu.selected_index < mut_menu.options.len() - 1 {
-            let current_line_out = mut_menu.format_option(mut_menu.get_menu().selected_index);
-            mut_menu.selected_index += 1;
-            let next_line_out = mut_menu.format_option(mut_menu.get_menu().selected_index);
-            self.move_with_direction(Direction::Down, current_line_out, next_line_out)?;
-        }
         Ok(())
     }
 

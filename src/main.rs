@@ -4,7 +4,10 @@ use menu::MultiMenu;
 
 fn main() {
     let multimenu = MultiMenu::default();
-    let menu = Menu::default();
+    let mut menu = Menu::default();
+    menu.selected_background_color(menu::Color::Black);
+    menu.selected_foreground_color(menu::Color::Yellow);
+
 
     let menus: Vec<Box<dyn MenuLike>>  = vec![Box::new(menu), Box::new(multimenu)];
     for mut menu in menus {

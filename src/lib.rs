@@ -9,11 +9,17 @@ use crossterm::{
 };
 use std::error::Error as StdError;
 use std::fmt::Display as StdDisplay;
-use std::{collections::HashSet, io::stdout, process};
+use std::io::{stdout, Write};
+use std::{collections::HashSet, process};
 
 #[derive(Debug)]
 pub enum MenuError {
     IndexOutOfBounds,
+}
+
+pub enum Direction {
+    Up,
+    Down,
 }
 
 impl StdDisplay for MenuError {
@@ -107,6 +113,70 @@ pub trait MenuLike {
         Ok(())
     }
 
+    fn move_with_direction(
+        &mut self,
+        direction: Direction,
+        current_line_out: String,
+        next_line_out: String,
+    ) -> Result<(), Box<dyn StdError>> {
+        let mut_menu = self.get_menu_mut();
+        let selector = &mut_menu.selector;
+        let selected_foreground_color = mut_menu.selected_foreground_color;
+        let selected_background_color = mut_menu.selected_background_color;
+        let dist = mut_menu.selector.len() as u16;
+        queue!(
+            mut_menu.stdout,
+            Clear(ClearType::CurrentLine),
+            cursor::MoveRight(dist),
+            Print(current_line_out),
+        )?;
+        match direction {
+            Direction::Up => {
+                queue!(mut_menu.stdout, cursor::MoveToPreviousLine(1))?;
+            }
+            Direction::Down => {
+                queue!(mut_menu.stdout, cursor::MoveToNextLine(1))?;
+            }
+        }
+        queue!(
+            mut_menu.stdout,
+            Clear(ClearType::CurrentLine),
+            SetForegroundColor(selected_foreground_color),
+            SetBackgroundColor(selected_background_color),
+            Print(selector),
+            Print(next_line_out),
+            cursor::MoveToColumn(1),
+            ResetColor
+        )?;
+        Ok(())
+    }
+
+    fn on_up_key(&mut self) -> Result<(), Box<dyn StdError>> {
+        let mut_menu = self.get_menu_mut();
+        if mut_menu.selected_index > 0 {
+            let current_line_out = mut_menu.format_option(mut_menu.selected_index);
+            mut_menu.selected_index -= 1;
+            let next_line_out = mut_menu.format_option(mut_menu.selected_index);
+            mut_menu.move_with_direction(Direction::Up, current_line_out, next_line_out)?;
+        }
+        Ok(())
+    }
+
+    fn on_down_key(&mut self) -> Result<(), Box<dyn StdError>> {
+        let mut_menu = self.get_menu_mut();
+        if mut_menu.selected_index < mut_menu.options.len() - 1 {
+            let current_line_out = mut_menu.format_option(mut_menu.get_menu().selected_index);
+            mut_menu.selected_index += 1;
+            let next_line_out = mut_menu.format_option(mut_menu.get_menu().selected_index);
+            mut_menu.move_with_direction(Direction::Down, current_line_out, next_line_out)?;
+        }
+        Ok(())
+    }
+
+    fn on_space_key(&mut self) -> Result<(), Box<dyn StdError>> {
+        Ok(())
+    }
+
     fn display(&mut self) -> Result<(), Box<dyn StdError>> {
         let mut_menu = self.get_menu_mut();
 
@@ -118,7 +188,7 @@ pub trait MenuLike {
                 let selector = &mut_menu.selector;
                 let selected_foreground_color = mut_menu.selected_foreground_color;
                 let selected_background_color = mut_menu.selected_background_color;
-                execute!(
+                queue!(
                     mut_menu.stdout,
                     SetForegroundColor(selected_foreground_color),
                     SetBackgroundColor(selected_background_color),
@@ -130,7 +200,7 @@ pub trait MenuLike {
                 continue;
             }
             let dist = mut_menu.selector.len() as u16;
-            execute!(
+            queue!(
                 mut_menu.stdout,
                 cursor::MoveRight(dist),
                 Print(option),
@@ -138,7 +208,8 @@ pub trait MenuLike {
             )?;
         }
         let dist = (mut_menu.options.len() - mut_menu.selected_index) as u16;
-        execute!(mut_menu.stdout, cursor::MoveToPreviousLine(dist),)?;
+        queue!(mut_menu.stdout, cursor::MoveToPreviousLine(dist))?;
+        mut_menu.stdout.flush()?;
         Ok(())
     }
 
@@ -147,61 +218,26 @@ pub trait MenuLike {
 
         mut_menu.setup_console()?;
         mut_menu.display()?;
-        let selector = &mut_menu.selector;
-        let selected_foreground_color = mut_menu.selected_foreground_color;
-        let selected_background_color = mut_menu.selected_background_color;
-        let dist = mut_menu.selector.len() as u16;
+
         loop {
             match read()? {
                 Event::Key(KeyEvent {
                     code: KeyCode::Up,
                     modifiers: KeyModifiers::NONE,
                 }) => {
-                    if mut_menu.selected_index > 0 {
-                        let current_line_out = mut_menu.format_option(mut_menu.selected_index);
-                        mut_menu.selected_index -= 1;
-                        let next_line_out = mut_menu.format_option(mut_menu.selected_index);
-                        execute!(
-                            mut_menu.stdout,
-                            Clear(ClearType::CurrentLine),
-                            cursor::MoveRight(dist),
-                            Print(current_line_out),
-                            cursor::MoveToPreviousLine(1),
-                            Clear(ClearType::CurrentLine),
-                            SetForegroundColor(selected_foreground_color),
-                            SetBackgroundColor(selected_background_color),
-                            Print(selector),
-                            Print(next_line_out),
-                            cursor::MoveToColumn(1),
-                            ResetColor,
-                        )?;
-                    }
+                    mut_menu.on_up_key()?;
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Down,
                     modifiers: KeyModifiers::NONE,
                 }) => {
-                    if mut_menu.selected_index < mut_menu.options.len() - 1 {
-                        let current_line_out =
-                            mut_menu.format_option(mut_menu.get_menu().selected_index);
-                        mut_menu.selected_index += 1;
-                        let next_line_out =
-                            mut_menu.format_option(mut_menu.get_menu().selected_index);
-                        execute!(
-                            mut_menu.stdout,
-                            Clear(ClearType::CurrentLine),
-                            cursor::MoveRight(dist),
-                            Print(current_line_out),
-                            cursor::MoveToNextLine(1),
-                            Clear(ClearType::CurrentLine),
-                            SetForegroundColor(selected_foreground_color),
-                            SetBackgroundColor(selected_background_color),
-                            Print(selector),
-                            Print(next_line_out),
-                            cursor::MoveToColumn(1),
-                            ResetColor,
-                        )?;
-                    }
+                    mut_menu.on_down_key()?;
+                }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Char(' '),
+                    modifiers: KeyModifiers::NONE,
+                }) => {
+                    mut_menu.on_space_key()?;
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Enter,
@@ -223,6 +259,7 @@ pub trait MenuLike {
                 }
                 _ => continue,
             }
+            mut_menu.stdout.flush()?;
         }
         mut_menu.restore_console()?;
         let mut selected = HashSet::new();
@@ -376,7 +413,7 @@ impl MenuLike for MultiMenu {
                 let selected_foreground_color = mut_menu.selected_foreground_color;
                 let selected_background_color = mut_menu.selected_background_color;
                 if selected_options.contains(&i) {
-                    execute!(
+                    queue!(
                         mut_menu.stdout,
                         SetForegroundColor(selected_selected_option_foreground_color),
                         SetBackgroundColor(selected_selected_option_background_color),
@@ -387,7 +424,7 @@ impl MenuLike for MultiMenu {
                     )?;
                     continue;
                 }
-                execute!(
+                queue!(
                     mut_menu.stdout,
                     SetForegroundColor(selected_foreground_color),
                     SetBackgroundColor(selected_background_color),
@@ -399,7 +436,7 @@ impl MenuLike for MultiMenu {
                 continue;
             }
             if selected_options.contains(&i) {
-                execute!(
+                queue!(
                     mut_menu.stdout,
                     SetForegroundColor(selected_option_foreground_color),
                     SetBackgroundColor(selected_option_background_color),
@@ -411,7 +448,7 @@ impl MenuLike for MultiMenu {
                 continue;
             }
             let dist = mut_menu.selector.len() as u16;
-            execute!(
+            queue!(
                 mut_menu.stdout,
                 cursor::MoveRight(dist),
                 Print(option),
@@ -419,7 +456,8 @@ impl MenuLike for MultiMenu {
             )?;
         }
         let dist = (mut_menu.options.len() - mut_menu.selected_index) as u16;
-        execute!(mut_menu.stdout, cursor::MoveToPreviousLine(dist),)?;
+        queue!(mut_menu.stdout, cursor::MoveToPreviousLine(dist))?;
+        mut_menu.stdout.flush()?;
         Ok(())
     }
 
